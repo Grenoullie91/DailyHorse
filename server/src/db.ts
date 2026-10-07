@@ -43,10 +43,13 @@ CREATE TABLE IF NOT EXISTS sync_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, source_id TEXT NOT NULL REFERENCES sources(id), started_at TEXT NOT NULL,
   finished_at TEXT, status TEXT NOT NULL, records_written INTEGER NOT NULL DEFAULT 0, error_message TEXT
 );
-CREATE TABLE IF NOT EXISTS oauth_tokens (
+  CREATE TABLE IF NOT EXISTS oauth_tokens (
   provider TEXT PRIMARY KEY, access_token TEXT NOT NULL, refresh_token TEXT,
   expires_at TEXT, updated_at TEXT NOT NULL
-);
+  );
+  CREATE TABLE IF NOT EXISTS agent_sessions (id TEXT PRIMARY KEY, name TEXT NOT NULL, cwd TEXT NOT NULL, status TEXT NOT NULL, task_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, error TEXT);
+  CREATE TABLE IF NOT EXISTS agent_tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, prompt TEXT NOT NULL, cwd TEXT, session_id TEXT, priority INTEGER NOT NULL DEFAULT 2, status TEXT NOT NULL, created_at TEXT NOT NULL, started_at TEXT, completed_at TEXT, result TEXT);
+  CREATE TABLE IF NOT EXISTS agent_events (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, session_id TEXT, task_id TEXT, detail TEXT, created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_snapshots_metric_date ON metric_snapshots(metric, captured_at);
 CREATE INDEX IF NOT EXISTS idx_snapshots_source ON metric_snapshots(source_id, captured_at);
 `);

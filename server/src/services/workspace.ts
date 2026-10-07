@@ -1,44 +1,38 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
 import pty, { type IPty } from "node-pty";
+import { db } from "../db.js";
 
 export type WorkspaceTarget = "agent" | "terminal";
-type Listener = (data: string) => void;
+type Status = "queued" | "starting" | "running" | "waiting" | "needs_attention" | "completed" | "failed" | "cancelled";
+type Listener = (event: object) => void;
 const home = process.env.OPENCODE_WORKSPACE_DIR ?? process.env.HOME ?? "/tmp";
 const shell = process.env.SHELL ?? "/bin/bash";
+const maximum = Math.max(1, Math.min(8, Number(process.env.OPENCODE_MAX_AGENTS ?? 3)));
 
 class Workspace {
-  private agent?: IPty; private terminal?: IPty; private listeners = new Map<WorkspaceTarget, Set<Listener>>([ ["agent", new Set()], ["terminal", new Set()] ]);
-  private sessionId = crypto.randomUUID(); private task: string | null = null; private lastError: string | null = null;
-  private spawn(target: WorkspaceTarget, fresh = false) {
-    const current = target === "agent" ? this.agent : this.terminal;
-    if (current) return current;
-    const command = target === "agent" ? "opencode" : shell;
-    const args = target === "agent" ? (fresh ? [home] : [home, "--continue"]) : ["-l"];
-    try {
-      const child = pty.spawn(command, args, { name: "xterm-256color", cols: 110, rows: 28, cwd: home, env: { ...process.env, TERM: "xterm-256color" } });
-      child.onData((data) => this.listeners.get(target)?.forEach((listener) => listener(data)));
-      child.onExit(({ exitCode }) => { if (target === "agent") { this.agent = undefined; this.task = null; } else this.terminal = undefined; if (exitCode !== 0) this.lastError = `${target} exited with code ${exitCode}`; });
-      if (target === "agent") this.agent = child; else this.terminal = child;
-      return child;
-    } catch (error) { this.lastError = error instanceof Error ? error.message : "Unable to start local workspace"; throw error; }
+  private agents = new Map<string, IPty>(); private terminal?: IPty; private listeners = new Set<Listener>();
+  constructor() { db.prepare("UPDATE agent_sessions SET status='stopped',error='Companion restarted; process state reconciled.' WHERE status IN ('running','starting','waiting')").run(); db.prepare("UPDATE agent_tasks SET status='needs_attention',result='Companion restarted; verify the task before continuing.' WHERE status IN ('running','starting')").run(); this.ensureDefault(); }
+  private now() { return new Date().toISOString(); }
+  private event(kind: string, sessionId?: string, taskId?: string, detail?: string) { db.prepare("INSERT INTO agent_events(kind,session_id,task_id,detail,created_at) VALUES (?,?,?,?,?)").run(kind, sessionId ?? null, taskId ?? null, detail ?? null, this.now()); const message = { type: "event", kind, sessionId, taskId, detail, at: this.now() }; this.listeners.forEach((listener) => listener(message)); }
+  private ensureDefault() { const row = db.prepare("SELECT id FROM agent_sessions LIMIT 1").get() as { id: string } | undefined; if (!row) this.createSession("General", home); }
+  private spawn(id: string) { const record = db.prepare("SELECT cwd FROM agent_sessions WHERE id=?").get(id) as { cwd: string } | undefined; if (!record) throw new Error("Unknown agent session."); const existing = this.agents.get(id); if (existing) return existing; const cwd = fs.existsSync(record.cwd) ? record.cwd : home; const child = pty.spawn("opencode", [cwd, "--continue"], { name: "xterm-256color", cols: 110, rows: 28, cwd, env: { ...process.env, TERM: "xterm-256color" } });
+    child.onExit(({ exitCode }) => { this.agents.delete(id); const active = db.prepare("SELECT task_id FROM agent_sessions WHERE id=?").get(id) as { task_id: string | null } | undefined; db.prepare("UPDATE agent_sessions SET status='stopped',updated_at=?,error=? WHERE id=?").run(this.now(), exitCode ? `OpenCode exited with ${exitCode}` : null, id); if (active?.task_id) db.prepare("UPDATE agent_tasks SET status='needs_attention',result=?,completed_at=? WHERE id=? AND status='running'").run("Agent exited; review required.", this.now(), active.task_id); this.event(exitCode ? "agent.crashed" : "agent.stopped", id, active?.task_id ?? undefined); this.schedule(); });
+    this.agents.set(id, child); db.prepare("UPDATE agent_sessions SET status='running',updated_at=?,error=NULL WHERE id=?").run(this.now(), id); this.event("agent.started", id); return child;
   }
-  status() {
-    const cwd = fs.existsSync(home) ? home : process.env.HOME ?? home;
-    let repository: string | null = null; let branch: string | null = null;
-    try { let cursor = cwd; while (cursor !== path.dirname(cursor)) { if (fs.existsSync(path.join(cursor, ".git"))) { repository = cursor; break; } cursor = path.dirname(cursor); } } catch { /* Context remains available without Git. */ }
-    return { version: 1, sessionId: this.sessionId, cwd, repository, branch, agent: this.agent ? "running" : "stopped", terminal: this.terminal ? "running" : "stopped", task: this.task, error: this.lastError };
+  createSession(name: string, cwd = home) { if (!name.trim() || name.length > 80) throw new Error("Session name must contain 1 to 80 characters."); const id = crypto.randomUUID(); db.prepare("INSERT INTO agent_sessions(id,name,cwd,status,created_at,updated_at) VALUES (?,?,?,'stopped',?,?)").run(id, name.trim(), cwd, this.now(), this.now()); this.event("agent.created", id); return id; }
+  createTask(input: { title: string; prompt: string; cwd?: string; sessionId?: string; priority?: number }) { if (!input.title.trim() || !input.prompt.trim() || input.prompt.length > 20_000) throw new Error("Task title and prompt are required."); const id = crypto.randomUUID(); db.prepare("INSERT INTO agent_tasks(id,title,prompt,cwd,session_id,priority,status,created_at) VALUES (?,?,?,?,?,?, 'queued',?)").run(id, input.title.trim(), input.prompt.trim(), input.cwd ?? null, input.sessionId ?? null, Math.max(1, Math.min(3, input.priority ?? 2)), this.now()); this.event("task.queued", input.sessionId, id); this.schedule(); return id; }
+  private schedule() { const running = this.agents.size; if (running >= maximum) return; const tasks = db.prepare("SELECT id,session_id,cwd,prompt FROM agent_tasks WHERE status='queued' ORDER BY priority ASC,created_at ASC LIMIT ?").all(maximum - running) as Array<{ id: string; session_id: string | null; cwd: string | null; prompt: string }>;
+    for (const task of tasks) { let sessionId = task.session_id; if (!sessionId) { const idle = db.prepare("SELECT id FROM agent_sessions WHERE status IN ('stopped','idle') ORDER BY updated_at LIMIT 1").get() as { id: string } | undefined; sessionId = idle?.id ?? this.createSession("Agent", task.cwd ?? home); } try { const process = this.spawn(sessionId); db.prepare("UPDATE agent_tasks SET status='running',session_id=?,started_at=? WHERE id=?").run(sessionId, this.now(), task.id); db.prepare("UPDATE agent_sessions SET task_id=?,status='running',updated_at=? WHERE id=?").run(task.id, this.now(), sessionId); process.write(`${task.prompt}\r`); this.event("task.started", sessionId, task.id); } catch (error) { db.prepare("UPDATE agent_tasks SET status='failed',result=?,completed_at=? WHERE id=?").run(error instanceof Error ? error.message : "Unable to start agent", this.now(), task.id); this.event("task.failed", sessionId ?? undefined, task.id); } }
   }
-  control(action: "start" | "restart" | "new" | "stop", target: WorkspaceTarget) {
-    const current = target === "agent" ? this.agent : this.terminal;
-    if (action === "stop") { current?.kill(); return this.status(); }
-    if (action === "restart" || action === "new") { current?.kill(); if (target === "agent" && action === "new") this.sessionId = crypto.randomUUID(); }
-    this.spawn(target, target === "agent" && action === "new"); return this.status();
-  }
-  taskInput(message: string) { if (!message.trim() || message.length > 20_000) throw new Error("Task must contain between 1 and 20,000 characters."); this.spawn("agent").write(`${message.trim()}\r`); this.task = message.trim(); this.lastError = null; return this.status(); }
-  attach(target: WorkspaceTarget, listener: Listener) { this.spawn(target); this.listeners.get(target)?.add(listener); return () => this.listeners.get(target)?.delete(listener); }
-  input(target: WorkspaceTarget, data: string) { if (data.length > 64_000) throw new Error("Terminal input is too large."); this.spawn(target).write(data); }
-  resize(target: WorkspaceTarget, cols: number, rows: number) { const process = target === "agent" ? this.agent : this.terminal; if (process && cols > 1 && rows > 1 && cols < 500 && rows < 300) process.resize(cols, rows); }
+  completeTask(id: string, status: Extract<Status, "completed" | "cancelled" | "needs_attention">, result?: string) { const task = db.prepare("SELECT session_id FROM agent_tasks WHERE id=?").get(id) as { session_id: string | null } | undefined; if (!task) throw new Error("Unknown task."); db.prepare("UPDATE agent_tasks SET status=?,result=?,completed_at=? WHERE id=?").run(status, result ?? null, this.now(), id); if (task.session_id) db.prepare("UPDATE agent_sessions SET task_id=NULL,status='idle',updated_at=? WHERE id=?").run(this.now(), task.session_id); this.event(`task.${status}`, task.session_id ?? undefined, id, result); this.schedule(); }
+  snapshot() { return { version: 2, maximum, sessions: db.prepare("SELECT * FROM agent_sessions ORDER BY updated_at DESC").all(), tasks: db.prepare("SELECT * FROM agent_tasks ORDER BY CASE status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END, priority,created_at DESC LIMIT 100").all(), events: db.prepare("SELECT * FROM agent_events ORDER BY id DESC LIMIT 40").all() }; }
+  subscribe(listener: Listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  status() { return { ...this.snapshot(), cwd: home, agent: this.agents.size ? "running" : "stopped", terminal: this.terminal ? "running" : "stopped" }; }
+  control(action: "start" | "restart" | "new" | "stop", target: WorkspaceTarget) { if (target === "terminal") { if (action === "stop") this.terminal?.kill(); else if (!this.terminal || action !== "start") { this.terminal?.kill(); this.terminal = pty.spawn(shell, ["-l"], { name: "xterm-256color", cols: 110, rows: 28, cwd: home, env: { ...process.env, TERM: "xterm-256color" } }); this.terminal.onExit(() => { this.terminal = undefined; this.event("terminal.exited"); }); } return this.status(); } const first = (db.prepare("SELECT id FROM agent_sessions ORDER BY created_at LIMIT 1").get() as { id: string }).id; if (action === "stop") this.agents.get(first)?.kill(); else this.spawn(action === "new" ? this.createSession("New session") : first); return this.status(); }
+  taskInput(message: string) { this.createTask({ title: message.slice(0, 80), prompt: message }); return this.status(); }
+  attach(target: WorkspaceTarget, listener: (data: string) => void) { if (target === "terminal") { this.control("start", "terminal"); this.terminal?.onData(listener); return () => {}; } const first = (db.prepare("SELECT id FROM agent_sessions ORDER BY created_at LIMIT 1").get() as { id: string }).id; this.spawn(first).onData(listener); return () => {}; }
+  input(target: WorkspaceTarget, data: string) { if (data.length > 64_000) throw new Error("Terminal input is too large."); if (target === "terminal") this.terminal?.write(data); else { const first = (db.prepare("SELECT id FROM agent_sessions ORDER BY created_at LIMIT 1").get() as { id: string }).id; this.spawn(first).write(data); } }
+  resize(target: WorkspaceTarget, cols: number, rows: number) { if (cols < 2 || rows < 2 || cols > 500 || rows > 300) return; if (target === "terminal") this.terminal?.resize(cols, rows); else for (const agent of this.agents.values()) agent.resize(cols, rows); }
 }
 export const workspace = new Workspace();
