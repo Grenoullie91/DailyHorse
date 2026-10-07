@@ -19,6 +19,7 @@ import { deviceBridge, DeviceBridgeError } from "./services/device-bridge.js";
 import { remoteFiles, RemoteFilesError } from "./services/remote-files.js";
 import { sftpCredentials } from "./services/sftp-credentials.js";
 import { localFiles, LocalFilesError } from "./services/local-files.js";
+import { systemMetrics } from "./services/system.js";
 
 const app = Fastify({ logger: true });
 app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_, body, done) => done(null, body));
@@ -58,6 +59,7 @@ app.post("/api/workspace/sessions", async (request, reply) => { const denied = r
 app.post("/api/workspace/tasks", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; const body = request.body as { title?: string; prompt?: string; cwd?: string; sessionId?: string; priority?: number; projectId?: string }; try { return { id: workspace.createTask({ title: body.title ?? "", prompt: body.prompt ?? "", cwd: body.cwd, sessionId: body.sessionId, priority: body.priority, projectId: body.projectId }) }; } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to queue task." }); } });
 app.post("/api/workspace/tasks/:id/status", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; const body = request.body as { status?: "completed" | "cancelled" | "needs_attention"; result?: string }; if (!body || !["completed", "cancelled", "needs_attention"].includes(body.status ?? "")) return reply.code(400).send({ error: "Invalid task status." }); try { workspace.completeTask((request.params as { id: string }).id, body.status!, body.result); return workspace.snapshot(); } catch (error) { return reply.code(404).send({ error: error instanceof Error ? error.message : "Unknown task." }); } });
 app.get("/api/work-os", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; todayIntegrations.setup(); return workOs.snapshot(); });
+app.get("/api/system/summary", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); return denied ?? systemMetrics.summary(); });
 app.get("/api/devices", async (request, reply) => {
   const denied = requireWorkspaceToken(request, reply); if (denied) return denied;
   try { return await deviceBridge.devices(); } catch (error) { return reply.code(502).send({ error: "KDE Connect-Geräte konnten nicht gelesen werden." }); }
