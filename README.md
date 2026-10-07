@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/dailyhorse-banner.svg" alt="DailyHorse" width="100%" />
+</p>
+
 # DailyHorse
 
 DailyHorse is a local-first personal command center for daily work. It brings projects, research, attention items, provider metrics, editorial context, files, and persistent OpenCode sessions into one loopback-only dashboard.
