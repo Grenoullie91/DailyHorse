@@ -48,7 +48,7 @@ a { text-underline-offset: 3px; }
 .hero > div, .hero button { position: relative; z-index: 1; }
 .hero > div { max-width: 59%; text-shadow: 0 3px 18px var(--page); }
 .hero p, .panel-head p { margin: 0 0 8px; color: var(--brand-strong); font: 500 10px "DM Mono", monospace; letter-spacing: .16em; }
-.hero h1 { margin: 0; font: 700 clamp(2.4rem, 5.15vw, 4rem)/.91 Newsreader, Georgia, serif; letter-spacing: -.035em; }
+.hero h1 { margin: 0; font: 700 clamp(2.15rem, 4.45vw, 3.5rem)/.94 Newsreader, Georgia, serif; letter-spacing: -.03em; }
 .hero span { display: block; margin-top: 12px; color: var(--text-secondary); }
 
 .hero button, .command a, .command button { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 10px 14px; border: 1px solid var(--border-emphasized); border-radius: var(--radius-sm); background: var(--brand); color: #fff; box-shadow: 0 5px 14px rgba(7, 2, 12, .17); text-decoration: none; transition: background 160ms, border-color 160ms, transform 160ms, box-shadow 160ms; }
