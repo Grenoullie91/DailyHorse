@@ -89,6 +89,13 @@ migrate("2026-10-07-remote-files", `
   );
 `);
 
+migrate("2026-10-07-local-files", `
+  CREATE TABLE local_file_roots (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, root_path TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+`);
+
 const sources = [
   ["github", "GitHub"], ["ga4", "Google Analytics 4"], ["search_console", "Google Search Console"],
   ["youtube", "YouTube"], ["instagram", "Instagram"], ["google_business", "Google Business Profile"],
