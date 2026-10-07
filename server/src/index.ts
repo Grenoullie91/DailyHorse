@@ -21,8 +21,10 @@ await app.register(cors, { origin: `http://${config.host}:5174` });
 await app.register(websocket);
 const workspaceTokens = new Map<string, number>();
 const allowedOrigins = new Set(["http://127.0.0.1:4174", "http://localhost:4174", "http://127.0.0.1:5174", "http://localhost:5174"]);
-function validWorkspaceRequest(origin: string | undefined, token: string | undefined) { const expires = token ? workspaceTokens.get(token) : undefined; return !!origin && allowedOrigins.has(origin) && !!expires && expires > Date.now(); }
-function requireWorkspaceToken(request: { headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { send: (body: object) => unknown } }) { return validWorkspaceRequest(request.headers.origin as string | undefined, request.headers["x-daily-horse-token"] as string | undefined) ? undefined : reply.code(401).send({ error: "Authenticated local workspace session required." }); }
+const allowedHosts = new Set(["127.0.0.1:4174", "localhost:4174", "127.0.0.1:5174", "localhost:5174"]);
+function localDashboardRequest(headers: Record<string, string | string[] | undefined>) { const origin = headers.origin as string | undefined; if (origin) return allowedOrigins.has(origin); return allowedHosts.has(headers.host as string) && headers["sec-fetch-site"] === "same-origin"; }
+function validWorkspaceRequest(headers: Record<string, string | string[] | undefined>, token: string | undefined) { const expires = token ? workspaceTokens.get(token) : undefined; return localDashboardRequest(headers) && !!expires && expires > Date.now(); }
+function requireWorkspaceToken(request: { headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { send: (body: object) => unknown } }) { return validWorkspaceRequest(request.headers, request.headers["x-daily-horse-token"] as string | undefined) ? undefined : reply.code(401).send({ error: "Authenticated local workspace session required." }); }
 app.get("/api/health", async () => ({ ok: true, now: new Date().toISOString() }));
 app.get("/api/overview", async () => overview());
 app.get("/api/sources", async () => sourceStatuses());
@@ -30,8 +32,7 @@ app.get("/api/series/:metric", async (request) => metricSeries((request.params a
 app.get("/api/insights", async () => insights());
 app.get("/api/editorial", async () => editorialOverview());
 app.get("/api/workspace/bootstrap", async (request, reply) => {
-  const origin = request.headers.origin;
-  if (!origin || !allowedOrigins.has(origin)) return reply.code(403).send({ error: "Local dashboard origin required." });
+  if (!localDashboardRequest(request.headers)) return reply.code(403).send({ error: "Local dashboard origin required." });
   const token = crypto.randomBytes(24).toString("base64url"); workspaceTokens.set(token, Date.now() + 5 * 60_000);
   return { token, status: workspace.status() };
 });
@@ -64,7 +65,7 @@ app.patch("/api/work-os/research/:id", async (request, reply) => { const denied 
 app.get("/api/workspace/socket", { websocket: true }, (socket, request) => {
   const protocols = request.headers["sec-websocket-protocol"]?.split(",").map((value) => value.trim()) ?? [];
   const token = protocols[1]; const target = (new URL(request.url, "http://localhost")).searchParams.get("target") as WorkspaceTarget;
-  if (!validWorkspaceRequest(request.headers.origin, token) || !["agent", "terminal"].includes(target)) return socket.close(1008, "Unauthorized local workspace connection");
+  if (!validWorkspaceRequest(request.headers, token) || !["agent", "terminal"].includes(target)) return socket.close(1008, "Unauthorized local workspace connection");
   const detach = workspace.attach(target, (data) => socket.send(JSON.stringify({ type: "output", data })));
   socket.send(JSON.stringify({ type: "status", status: workspace.status() }));
   socket.on("message", (raw: Buffer) => { try { const message = JSON.parse(raw.toString()) as { type?: string; data?: string; cols?: number; rows?: number }; if (message.type === "input" && typeof message.data === "string") workspace.input(target, message.data); if (message.type === "resize") workspace.resize(target, Number(message.cols), Number(message.rows)); } catch { socket.close(1003, "Invalid terminal message"); } });
