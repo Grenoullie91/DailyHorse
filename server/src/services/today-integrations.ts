@@ -16,7 +16,7 @@ function accounts(): MailAccount[] {
   return parsed.map((account) => {
     const item = account as Partial<MailAccount>;
     if (!item.id || !item.email || !item.password || !/^[a-zA-Z0-9_-]{1,80}$/.test(item.id)) throw new Error("Every IONOS account needs a safe id, email, and password.");
-    return { id: item.id, email: item.email, password: item.password, host: item.host ?? "imap.ionos.com", port: item.port ?? 993, tls: item.tls ?? true };
+    return { id: item.id, email: item.email, password: item.password, host: item.host ?? "imap.ionos.de", port: item.port ?? 993, tls: item.tls ?? true };
   });
 }
 
@@ -37,7 +37,13 @@ async function withMailbox<T>(accountId: string, readOnly: boolean, action: (cli
   if (!account) throw new Error("Unknown mail account.");
   const client = new ImapFlow({ host: account.host!, port: account.port!, secure: account.tls!, auth: { user: account.email, pass: account.password }, logger: false });
   try { await client.connect(); await client.mailboxOpen("INBOX", { readOnly }); const value = await action(client); integrationState("mail", "connected", `${accounts().length} IONOS account(s) configured; Inbox access is read-only.`); return value; }
-  catch (error) { integrationState("mail", "error", error instanceof Error ? error.message : "Unable to connect to IONOS IMAP."); throw error; }
+  catch (error) {
+    const responseText = (error as { responseText?: unknown })?.responseText;
+    const authenticationFailed = typeof responseText === "string" && /authentication failed/i.test(responseText);
+    const detail = authenticationFailed ? "IONOS rejected the configured login. Update the local account password or app password and confirm IMAP access is enabled." : error instanceof Error ? error.message : "Unknown IMAP error.";
+    integrationState("mail", "error", detail);
+    throw new Error(`IONOS IMAP could not load the inbox. ${detail}`);
+  }
   finally { if (client.usable) await client.logout().catch(() => undefined); }
 }
 
