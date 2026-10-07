@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DailyHorse Workspace</title>
+    <link rel="stylesheet" href="sidepanel.css">
+  </head>
+  <body>
+    <main class="sidebar" id="sidebar">
+      <header class="sidebar-head">
+        <button class="mark icon-button" id="toggle" aria-label="Sidebar einklappen" title="Sidebar einklappen">DH</button>
+        <div class="brand"><strong>DailyHorse</strong><span>Browser workspace</span></div>
+        <button class="icon-button" id="refreshTabs" aria-label="Tabs aktualisieren" title="Tabs aktualisieren">↻</button>
+      </header>
+      <div class="search-wrap"><label class="sr-only" for="search">Tabs und gespeicherte Seiten durchsuchen</label><input id="search" type="search" placeholder="Suchen …"></div>
+      <section class="section tabs-section" aria-labelledby="open-tabs-heading">
+        <div class="section-head"><h1 id="open-tabs-heading">Open Tabs</h1><span id="tabCount" class="count"></span></div>
+        <div class="items" id="openTabs" aria-live="polite"></div>
+      </section>
+      <section class="section saved-section" aria-labelledby="saved-heading">
+        <div class="section-head"><h1 id="saved-heading">Saved</h1><span id="pageCount" class="count"></span></div>
+        <div class="folders" id="folders"></div>
+        <p class="empty" id="emptySaved" hidden>Noch keine gespeicherten Seiten. Speichere eine aktuelle Seite, um sie dauerhaft griffbereit zu halten.</p>
+      </section>
+      <footer class="sidebar-foot">
+        <button id="saveActive" class="primary">Aktuelle Seite speichern</button>
+        <button id="newFolder" class="secondary">+ Ordner</button>
+      </footer>
+    </main>
+    <template id="itemTemplate"><div class="item"><button class="item-main"><img class="favicon" alt=""><span class="item-copy"><b></b><small></small></span></button><button class="more" aria-label="Weitere Aktionen">⋯</button></div></template>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

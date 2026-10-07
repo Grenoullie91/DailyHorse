@@ -2,6 +2,10 @@
   "manifest_version": 3,
   "name": "Haas Arts Daily Workhorse",
   "version": "1.0.0",
-  "description": "Opens the local Haas Arts daily dashboard in each new tab.",
+  "description": "Local DailyHorse dashboard and browser workspace navigator.",
+  "permissions": ["sidePanel", "storage", "tabs"],
+  "action": { "default_title": "DailyHorse Workspace" },
+  "background": { "service_worker": "service-worker.js", "type": "module" },
+  "side_panel": { "default_path": "sidepanel.html" },
   "chrome_url_overrides": { "newtab": "newtab.html" }
 }

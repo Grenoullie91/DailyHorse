@@ -113,7 +113,12 @@ Load `new-tab-extension/` as an unpacked extension in a Chromium browser:
 3. Select **Load unpacked**.
 4. Choose `new-tab-extension/`.
 
-The extension redirects new tabs to the local dashboard. It contains no credentials and does not communicate with external services.
+The extension redirects new tabs to the local dashboard and provides a Chromium Side Panel browser workspace.
+
+- **Open tabs** are read live with the official `chrome.tabs` API and are never persisted as browsing history.
+- **Saved pages and folders** are created only through an explicit user action and stay in `chrome.storage.local`, not in cloud sync or external services.
+- The side panel uses only `tabs`, `storage`, and `sidePanel` permissions. It deliberately has no broad host permissions and cannot replace Chromium's native tab strip.
+- Click the extension toolbar button to open the Side Panel. Saved pages focus an existing matching tab before opening a duplicate.
 
 ## Autostart
 
