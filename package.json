@@ -1,0 +1,49 @@
+{
+  "name": "haas-arts-digital-performance",
+  "version": "1.0.0",
+  "description": "Local-first digital performance dashboard for Haas Arts",
+  "private": true,
+  "type": "module",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch server/src/index.ts",
+    "dev:web": "vite --host 127.0.0.1",
+    "build": "vite build && tsc -p server/tsconfig.json",
+    "start": "NODE_ENV=production tsx server/src/index.ts",
+    "test": "vitest run",
+    "sync": "tsx server/src/cli.ts sync",
+    "install-autostart": "bash scripts/install-autostart.sh",
+    "uninstall-autostart": "bash scripts/uninstall-autostart.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@fastify/static": "^10.1.5",
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^18.0.6",
+    "fastify": "^5.12.5",
+    "lucide-react": "^1.52.0",
+    "node-cron": "^4.6.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "recharts": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
+  }
+}

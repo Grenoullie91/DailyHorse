@@ -1,0 +1,5 @@
+import type { Kpi } from "../api";
+import { SourceDialog } from "./SourceDialog";
+const labels: Record<string, string> = { users: "Users", new_users: "New users", sessions: "Sessions", pageviews: "Pageviews", engagement: "Engagement", website_clicks: "Website clicks", youtube_views: "YouTube views", instagram_reach: "Instagram reach", search_clicks: "Search clicks", play_downloads: "Play downloads", github_views: "GitHub views" };
+const format = (value: number | null) => value === null ? "—" : new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1 }).format(value);
+export function KpiCard({ kpi }: { kpi: Kpi }) { return <article className={`kpi-card ${kpi.value === null ? "kpi-unavailable" : ""}`}><div className="kpi-head"><span>{labels[kpi.id] ?? kpi.id}</span><SourceDialog info={kpi.info}/></div><strong>{format(kpi.value)}</strong><p>{kpi.value === null ? (kpi.info.availability === "available" ? "Noch keine Messwerte" : "Verbindung erforderlich") : `Direkt gemessen · ${kpi.info.source}`}</p></article>; }

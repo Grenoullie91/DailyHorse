@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "Haas Arts Daily Workhorse",
+  "version": "1.0.0",
+  "description": "Opens the local Haas Arts daily dashboard in each new tab.",
+  "chrome_url_overrides": { "newtab": "newtab.html" }
+}
