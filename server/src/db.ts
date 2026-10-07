@@ -54,6 +54,28 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_metric_date ON metric_snapshots(metric,
 CREATE INDEX IF NOT EXISTS idx_snapshots_source ON metric_snapshots(source_id, captured_at);
 `);
 
+// Additive migrations keep existing local SQLite files intact during upgrades.
+db.exec("CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+function migrate(id: string, sql: string) {
+  if (db.prepare("SELECT 1 FROM schema_migrations WHERE id=?").get(id)) return;
+  db.transaction(() => {
+    db.exec(sql);
+    db.prepare("INSERT INTO schema_migrations(id,applied_at) VALUES (?,?)").run(id, new Date().toISOString());
+  })();
+}
+
+migrate("2026-10-07-work-os", `
+  CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+  CREATE TABLE research_queue (id TEXT PRIMARY KEY, title TEXT NOT NULL, notes TEXT, url TEXT, status TEXT NOT NULL DEFAULT 'inbox', project_id TEXT REFERENCES projects(id) ON DELETE SET NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+  CREATE TABLE integration_setup (provider TEXT PRIMARY KEY, state TEXT NOT NULL, detail TEXT NOT NULL, updated_at TEXT NOT NULL);
+  ALTER TABLE agent_tasks ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;
+  CREATE INDEX idx_agent_tasks_project ON agent_tasks(project_id, status);
+  CREATE INDEX idx_research_queue_status ON research_queue(status, created_at);
+  INSERT INTO integration_setup(provider,state,detail,updated_at) VALUES
+    ('mail','setup_needed','Mail is not connected. Setup is intentionally manual.',datetime('now')),
+    ('calendar','setup_needed','Calendar is not connected. Setup is intentionally manual.',datetime('now'));
+`);
+
 const sources = [
   ["github", "GitHub"], ["ga4", "Google Analytics 4"], ["search_console", "Google Search Console"],
   ["youtube", "YouTube"], ["instagram", "Instagram"], ["google_business", "Google Business Profile"],
