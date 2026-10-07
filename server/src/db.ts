@@ -80,6 +80,15 @@ migrate("2026-10-07-today-integrations", `
   CREATE TABLE calendar_selections (calendar_id TEXT PRIMARY KEY, selected INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL);
 `);
 
+migrate("2026-10-07-remote-files", `
+  CREATE TABLE remote_profiles (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, host TEXT NOT NULL, port INTEGER NOT NULL,
+    protocol TEXT NOT NULL, username TEXT NOT NULL, remote_root TEXT NOT NULL,
+    local_root TEXT NOT NULL, environment TEXT NOT NULL DEFAULT 'production',
+    project_id TEXT REFERENCES projects(id) ON DELETE SET NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+  );
+`);
+
 const sources = [
   ["github", "GitHub"], ["ga4", "Google Analytics 4"], ["search_console", "Google Search Console"],
   ["youtube", "YouTube"], ["instagram", "Instagram"], ["google_business", "Google Business Profile"],
