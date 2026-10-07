@@ -15,8 +15,10 @@ import { editorialOverview } from "./services/editorial.js";
 import { workspace, type WorkspaceTarget } from "./services/workspace.js";
 import { workOs, type ProjectStatus, type ResearchStatus } from "./services/work-os.js";
 import { todayIntegrations } from "./services/today-integrations.js";
+import { deviceBridge, DeviceBridgeError } from "./services/device-bridge.js";
 
 const app = Fastify({ logger: true });
+app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_, body, done) => done(null, body));
 await app.register(cors, { origin: `http://${config.host}:5174` });
 await app.register(websocket);
 const workspaceTokens = new Map<string, number>();
@@ -53,6 +55,31 @@ app.post("/api/workspace/sessions", async (request, reply) => { const denied = r
 app.post("/api/workspace/tasks", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; const body = request.body as { title?: string; prompt?: string; cwd?: string; sessionId?: string; priority?: number; projectId?: string }; try { return { id: workspace.createTask({ title: body.title ?? "", prompt: body.prompt ?? "", cwd: body.cwd, sessionId: body.sessionId, priority: body.priority, projectId: body.projectId }) }; } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Unable to queue task." }); } });
 app.post("/api/workspace/tasks/:id/status", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; const body = request.body as { status?: "completed" | "cancelled" | "needs_attention"; result?: string }; if (!body || !["completed", "cancelled", "needs_attention"].includes(body.status ?? "")) return reply.code(400).send({ error: "Invalid task status." }); try { workspace.completeTask((request.params as { id: string }).id, body.status!, body.result); return workspace.snapshot(); } catch (error) { return reply.code(404).send({ error: error instanceof Error ? error.message : "Unknown task." }); } });
 app.get("/api/work-os", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; todayIntegrations.setup(); return workOs.snapshot(); });
+app.get("/api/devices", async (request, reply) => {
+  const denied = requireWorkspaceToken(request, reply); if (denied) return denied;
+  try { return await deviceBridge.devices(); } catch (error) { return reply.code(502).send({ error: "KDE Connect-Geräte konnten nicht gelesen werden." }); }
+});
+function deviceError(reply: { code: (status: number) => { send: (body: object) => unknown } }, error: unknown) { return reply.code(error instanceof DeviceBridgeError ? error.status : 502).send({ error: error instanceof Error ? error.message : "Geräteaktion fehlgeschlagen." }); }
+app.post("/api/devices/:id/send-url", async (request, reply) => {
+  const denied = requireWorkspaceToken(request, reply); if (denied) return denied;
+  try { await deviceBridge.shareUrl((request.params as { id: string }).id, (request.body as { url?: unknown })?.url as string); return { ok: true }; } catch (error) { return deviceError(reply, error); }
+});
+app.post("/api/devices/:id/send-clipboard", async (request, reply) => {
+  const denied = requireWorkspaceToken(request, reply); if (denied) return denied;
+  const text = (request.body as { text?: unknown })?.text;
+  if (typeof text !== "string") return reply.code(400).send({ error: "Text aus der Zwischenablage erforderlich." });
+  try { await deviceBridge.shareText((request.params as { id: string }).id, text); return { ok: true }; } catch (error) { return deviceError(reply, error); }
+});
+app.post("/api/devices/:id/ring", async (request, reply) => {
+  const denied = requireWorkspaceToken(request, reply); if (denied) return denied;
+  try { await deviceBridge.ring((request.params as { id: string }).id); return { ok: true }; } catch (error) { return deviceError(reply, error); }
+});
+app.post("/api/devices/:id/send-file", { bodyLimit: 25 * 1024 * 1024 }, async (request, reply) => {
+  const denied = requireWorkspaceToken(request, reply); if (denied) return denied;
+  const name = request.headers["x-dailyhorse-filename"];
+  if (typeof name !== "string" || !Buffer.isBuffer(request.body)) return reply.code(400).send({ error: "Eine ausgewählte Datei ist erforderlich." });
+  try { await deviceBridge.shareFile((request.params as { id: string }).id, name, request.body); return { ok: true }; } catch (error) { return deviceError(reply, error); }
+});
 app.get("/api/today/mail/accounts", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; try { return { accounts: todayIntegrations.accounts() }; } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Invalid mail setup." }); } });
 app.get("/api/today/mail/messages", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; const query = request.query as { accountId?: string; filter?: string; search?: string }; if (!query.accountId || !["inbox", "unread", "flagged", "search"].includes(query.filter ?? "inbox")) return reply.code(400).send({ error: "A mail account and valid filter are required." }); try { return await todayIntegrations.messages(query.accountId, (query.filter ?? "inbox") as "inbox" | "unread" | "flagged" | "search", query.search); } catch (error) { return reply.code(502).send({ error: error instanceof Error ? error.message : "Unable to load mail." }); } });
 app.get("/api/today/calendars", async (request, reply) => { const denied = requireWorkspaceToken(request, reply); if (denied) return denied; try { return await todayIntegrations.calendars(); } catch (error) { return reply.code(502).send({ error: error instanceof Error ? error.message : "Unable to load calendars." }); } });
