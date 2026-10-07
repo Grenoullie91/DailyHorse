@@ -1,155 +1,109 @@
-<p align="center">
-  <img src="docs/assets/dailyhorse-banner.svg" alt="DailyHorse" width="100%" />
-</p>
-
 # DailyHorse
 
-**A local-first daily command center for performance, editorial work, and OpenCode-powered development.**
+DailyHorse is a local-first dashboard for personal work: provider metrics, editorial summaries, local file workspaces, a browser companion, and persistent OpenCode or shell sessions. It runs as a local Fastify service with a React/Vite interface and SQLite state.
 
-DailyHorse turns a browser new tab into a calm local workspace: check real performance signals, review editorial opportunities, open the full blog editorial desk, and delegate development work to persistent local OpenCode sessions.
+## Local-First Model
 
-> Local by design. No hosted control plane. No browser-cookie scraping. No fabricated metrics.
+- The application server and Vite development server bind only to `127.0.0.1`.
+- The application is intended for one local user, not for network or multi-user deployment.
+- Runtime state is stored locally in SQLite under `DATA_DIR` (default `data/`).
+- Optional provider credentials are read from local environment variables or local credential files. They are not sent to the browser by the application.
+- The optional Chromium extension redirects new tabs to the local dashboard. Its saved pages use `chrome.storage.local`; it does not request broad host permissions.
 
-## What It Does
+## Features
 
-| Area | Purpose |
-| --- | --- |
-| **Command Center** | Persistent local OpenCode sessions, task queue, active jobs, recent activity, and an interactive terminal. |
-| **Performance** | Official API-backed signals from GA4, Search Console, YouTube, GitHub, Google Play, and optional Meta/Instagram integrations. |
-| **Editorial** | Blog inventory, ranked research candidates, editorial source health, and direct access to the existing local editorial desk. |
-| **New Tab** | A minimal Chromium extension opens the local dashboard for every new browser tab. |
+- Dashboard views for configured Google, GitHub, YouTube, Google Play, and Meta/Instagram data sources.
+- Optional read-only IMAP mail and Google Calendar views.
+- Local editorial summary data from an optional `EDITORIAL_ROOT` directory.
+- Local and SFTP file workspaces.
+- Device actions through a local KDE Connect command bridge.
+- A work queue, local SQLite history, and PTY-backed OpenCode and shell sessions.
 
-## Daily Flow
+Provider integrations are optional. Unconfigured or unavailable sources are reported as such rather than replaced with estimated data.
 
-1. Open a new tab.
-2. Capture a task with `OpenCode, erledige ...`.
-3. See which agents and tasks are active, queued, stopped, or need attention.
-4. Check measured performance and editorial signals.
-5. Open the full local editorial workspace when it is time to research, draft, review, or publish.
+## Security And Privacy
 
-## Architecture
+- The server has a fixed loopback-only listener; `HOST` cannot expose it externally.
+- Workspace control and WebSocket endpoints require a short-lived, in-memory token issued to allowed local origins.
+- Browser development CORS is restricted to the loopback Vite origin.
+- Secrets, credential files, environment files, databases, logs, and build output are excluded from Git by `.gitignore`.
+- Data from configured providers, local files, terminal sessions, and the optional extension remains on the local machine except where an enabled integration necessarily contacts its provider.
 
-```text
-Chromium New Tab extension
-          |
-          v
-DailyHorse dashboard  (127.0.0.1:4174)
-          |
-          +-- official analytics/content connectors
-          +-- local editorial data and admin workspace
-          +-- authenticated local WebSocket companion
-                    |
-                    +-- OpenCode PTY sessions
-                    +-- interactive shell PTY
-                    +-- SQLite task/session/event registry
-```
-
-The browser is a client only. The local Fastify service is the source of truth for agent metadata, queue state, and PTY lifecycle.
-
-## OpenCode Command Center
-
-- Multiple named local agent-session records with independent OpenCode PTYs.
-- Persistent task queue and event history in local SQLite.
-- Configurable concurrency cap through `OPENCODE_MAX_AGENTS` (default `3`, maximum `8`).
-- Task states: `queued`, `starting`, `running`, `waiting`, `needs_attention`, `completed`, `failed`, `cancelled`.
-- Companion restart reconciliation: previous running tasks become `needs_attention`; the dashboard never claims a process survived without verifying it.
-- xterm.js shell and OpenCode terminals with ANSI colors, resize, scrollback, keyboard input, and copy/paste.
-
-OpenCode itself remains responsible for its own permission model, `AGENTS.md` rules, configured providers, and operating-system access. DailyHorse does not auto-approve permissions or add privileges.
-
-## Security Model
-
-- The server binds to `127.0.0.1` by default.
-- The workspace bridge accepts only explicit local dashboard origins.
-- PTY control requires a short-lived, in-memory, same-origin token.
-- No wildcard CORS, public network listener, remote-execution API, or command query parameters.
-- OAuth credentials, service-account files, tokens, SQLite databases, logs, and `.env` are ignored by Git.
-- External data comes from documented official APIs. When data is unavailable, the UI says so instead of estimating it.
+This is not an authentication boundary for a shared computer. Do not expose it through port forwarding, a reverse proxy, containers with published ports, or a network interface. The terminal and file features can act with the permissions of the local user.
 
 ## Requirements
 
-- Node.js 22+
-- Linux/macOS-style local shell for PTY support
-- OpenCode installed and available on `PATH` for the agent workspace
-- Optional: `systemd --user` for autostart
-- Optional: provider credentials only for the connectors you choose to enable
+- Node.js 22 or newer
+- A supported local shell and `node-pty` build environment
+- OpenCode on `PATH` for agent sessions
+- Optional: Chromium for the extension and `systemd --user` for autostart
 
-## Quick Start
+## Setup
 
 ```bash
-git clone https://github.com/Grenoullie91/DailyHorse.git
-cd DailyHorse
 cp .env.example .env
 npm install
 npm run build
 npm start
 ```
 
-Open `http://127.0.0.1:4174`.
+Open `http://127.0.0.1:4174` in the same machine's browser. The production server serves the built web application from `dist/web`.
 
-For development:
+For development, run:
 
 ```bash
 npm run dev
 ```
 
+The Vite interface is available at `http://127.0.0.1:5174` and proxies API requests to the local application server.
+
 ## Configuration
 
-All secrets are local environment variables. Start from `.env.example`; never commit `.env`.
+Start with `.env.example` and keep `.env` local. All provider credentials are optional. Do not commit tokens, passwords, OAuth client files, service-account files, databases, or local paths.
 
-| Setting | Use |
+| Setting | Purpose |
 | --- | --- |
-| `OPENCODE_WORKSPACE_DIR` | Neutral default directory for new OpenCode sessions. Defaults to the local home directory. |
-| `OPENCODE_MAX_AGENTS` | Maximum concurrently spawned OpenCode agents. Defaults to `3`. |
-| `SYNC_INTERVAL_MINUTES` | Connector refresh interval. Defaults to `60`. |
-| `GITHUB_TOKEN`, Google/Meta settings | Optional connector credentials. They remain server-side only. |
+| `PORT` | Local application port; defaults to `4174`. |
+| `DATA_DIR` | Directory for the local SQLite database; defaults to `data`. |
+| `SYNC_INTERVAL_MINUTES` | Connector refresh interval; defaults to `60`. |
+| `OPENCODE_WORKSPACE_DIR` | Initial directory for OpenCode and shell sessions; defaults to the current user's home directory. |
+| `OPENCODE_MAX_AGENTS` | Concurrent OpenCode process limit from `1` to `8`; defaults to `3`. |
+| `EDITORIAL_ROOT` | Optional directory containing editorial JSON and draft content. |
+| `DASHBOARD_ASSETS_DIR` | Optional directory containing `logodashboard.png` and `Headerdashboard.png`. |
+| Provider variables | Optional GitHub, Google, YouTube, Meta, Google Play, and IMAP configuration described in `.env.example`. |
 
-## Browser New Tab
+OAuth redirect URIs in `.env.example` use loopback URLs and must be registered with the relevant provider if that integration is enabled.
 
-Load `new-tab-extension/` as an unpacked extension in a Chromium browser:
+## Browser Extension
 
-1. Open `chrome://extensions` or `brave://extensions`.
-2. Enable **Developer mode**.
-3. Select **Load unpacked**.
-4. Choose `new-tab-extension/`.
-
-The extension redirects new tabs to the local dashboard and provides a Chromium Side Panel browser workspace.
-
-- **Open tabs** are read live with the official `chrome.tabs` API and are never persisted as browsing history.
-- **Saved pages and folders** are created only through an explicit user action and stay in `chrome.storage.local`, not in cloud sync or external services.
-- The side panel uses only `tabs`, `storage`, and `sidePanel` permissions. It deliberately has no broad host permissions and cannot replace Chromium's native tab strip.
-- Click the extension toolbar button to open the Side Panel. Saved pages focus an existing matching tab before opening a duplicate.
+Load `new-tab-extension/` as an unpacked extension in a Chromium-based browser from its extensions page with developer mode enabled. It opens the local dashboard for new tabs and provides a side panel for saved pages and currently open tabs.
 
 ## Autostart
 
-The repository includes a user-service template for the dashboard. After building, install the user service:
+After building, install the user service with:
 
 ```bash
 npm run install-autostart
-systemctl --user status haas-arts-dashboard.service
 ```
 
-The editorial workspace is intentionally a separate local service in the Haas Arts installation because it owns the Markdown files and publication workflow.
+The generated service runs `npm start` from this project directory. Check it with `systemctl --user status haas-arts-dashboard.service`.
 
-## Honest Limitations
+## Limitations
 
-- OpenCode's terminal interface does not expose a universally reliable percentage-progress API. DailyHorse shows durable status, timestamps, output, and attention states instead of invented progress bars.
-- Task completion and attention status can be set explicitly in the command-center lifecycle; process exits are reconciled conservatively.
-- Connector coverage depends on external provider permissions. Unsupported metrics remain unavailable rather than inferred.
+- This project is intentionally loopback-only and has no remote-access deployment mode.
+- Provider data depends on external API availability, permissions, quotas, and configured credentials.
+- OpenCode does not provide reliable universal task-progress percentages. The dashboard shows process state, output, timestamps, and attention states instead.
+- Running tasks are reconciled conservatively after a dashboard restart and may require review.
+- The optional editorial root and asset directory are local filesystem paths; absent directories produce empty editorial data or unavailable image assets.
+- SFTP, terminal, file, device, and provider actions have the capabilities and failure modes of their local tools and configured accounts.
 
-## Development
+## Verification
 
 ```bash
 npm run build
 npm test
 ```
 
-The project uses React/Vite, Fastify, SQLite/WAL, xterm.js, node-pty, and official provider APIs. See `docs/research/` for connector-specific source and API notes.
-
-## Privacy
-
-DailyHorse is designed for a single local user. It is not a hosted multi-tenant service and should not be exposed to a network without a separate, deliberate security design.
-
 ## License
 
-See [LICENSE](LICENSE).
+[ISC](LICENSE)

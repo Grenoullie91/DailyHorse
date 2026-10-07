@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const root = process.env.EDITORIAL_ROOT ?? "/home/haas/Dokumente/Projekte/haasarts.de/blog";
+const root = path.resolve(process.env.EDITORIAL_ROOT ?? "editorial");
 function readJson<T>(file: string, fallback: T): T {
   try { return JSON.parse(fs.readFileSync(path.join(root, file), "utf8")) as T; } catch { return fallback; }
 }

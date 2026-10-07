@@ -123,8 +123,10 @@ app.get("/api/workspace/socket", { websocket: true }, (socket, request) => {
   socket.on("close", detach);
 });
 app.get("/api/assets/:asset", async (request, reply) => {
-  const files: Record<string, string> = { logo: "/home/haas/Dokumente/Projekte/haasarts.de/assets/logodashboard.png", header: "/home/haas/Dokumente/Projekte/haasarts.de/assets/Headerdashboard.png" };
-  const file = files[(request.params as { asset: string }).asset];
+  const assetDirectory = process.env.DASHBOARD_ASSETS_DIR;
+  const files: Record<string, string> = { logo: "logodashboard.png", header: "Headerdashboard.png" };
+  const name = files[(request.params as { asset: string }).asset];
+  const file = assetDirectory && name ? path.resolve(assetDirectory, name) : undefined;
   if (!file || !fs.existsSync(file)) return reply.code(404).send({ error: "Asset not found" });
   return reply.type("image/png").send(fs.createReadStream(file));
 });

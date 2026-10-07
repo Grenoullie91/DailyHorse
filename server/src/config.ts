@@ -10,10 +10,10 @@ const googleClient = clientFile.web ?? clientFile.installed ?? {};
 
 export const config = {
   port: Number(process.env.PORT ?? 4174),
-  host: process.env.HOST ?? "127.0.0.1",
+  host: "127.0.0.1",
   dataDir: path.resolve(process.env.DATA_DIR ?? "data"),
   syncIntervalMinutes: Number(process.env.SYNC_INTERVAL_MINUTES ?? 60),
-  github: { username: process.env.GITHUB_USERNAME ?? "Grenoullie91", token: process.env.GITHUB_TOKEN },
+  github: { username: process.env.GITHUB_USERNAME ?? "", token: process.env.GITHUB_TOKEN },
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? googleClient.client_id,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? googleClient.client_secret,
