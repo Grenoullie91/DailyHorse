@@ -61,13 +61,6 @@ export const todayIntegrations = {
       return { account: { id: accountId, email: accounts().find((item) => item.id === accountId)?.email }, messages: messages.reverse() };
     });
   },
-  async changeMessage(accountId: string, uid: number, action: "read" | "unread" | "flag" | "unflag") {
-    return withMailbox(accountId, false, async (client) => {
-      const flag = action === "read" || action === "unread" ? "\\Seen" : "\\Flagged";
-      if (action === "read" || action === "flag") await client.messageFlagsAdd(uid, [flag], { uid: true }); else await client.messageFlagsRemove(uid, [flag], { uid: true });
-      return { ok: true };
-    });
-  },
   async calendars() {
     try {
       const token = await googleAccessToken();
