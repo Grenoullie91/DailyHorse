@@ -10,7 +10,7 @@ type MailMessage = { uid: number; subject: string; from: string[]; date: string 
 type Calendar = { id: string; summary: string; selected: boolean; primary?: boolean };
 type CalendarEvent = { id: string; calendar: string; summary: string; start: string | null; allDay: boolean };
 
-export function WorkOsHome({ onOpenAgent }: { onOpenAgent: () => void }) {
+export function WorkOsHome() {
   const [token, setToken] = useState<string>(); const [data, setData] = useState<WorkOs>(); const [error, setError] = useState<string>();
   const [projectName, setProjectName] = useState(""); const [researchTitle, setResearchTitle] = useState(""); const [taskTitle, setTaskTitle] = useState(""); const [projectId, setProjectId] = useState(""); const [accounts, setAccounts] = useState<Array<{ id: string; email: string }>>([]); const [accountId, setAccountId] = useState(""); const [messages, setMessages] = useState<MailMessage[]>([]); const [mailFilter, setMailFilter] = useState("inbox"); const [mailSearch, setMailSearch] = useState(""); const [calendars, setCalendars] = useState<Calendar[]>([]); const [events, setEvents] = useState<CalendarEvent[]>([]);
   const headers = (json = false) => ({ "x-daily-horse-token": token ?? "", ...(json ? { "Content-Type": "application/json" } : {}) });
@@ -24,7 +24,7 @@ export function WorkOsHome({ onOpenAgent }: { onOpenAgent: () => void }) {
   const loadCalendar = async () => { const result = await request<{ calendars: Calendar[] }>("/api/today/calendars"); setCalendars(result.calendars); const today = await request<{ events: CalendarEvent[] }>("/api/today/events"); setEvents(today.events); };
   useEffect(() => { if (!token) return; void request<{ accounts: Array<{ id: string; email: string }> }>("/api/today/mail/accounts").then((result) => { setAccounts(result.accounts); setAccountId((current) => current || result.accounts[0]?.id || ""); }).catch((reason) => setError(reason.message)); void loadCalendar().catch((reason) => setError(reason.message)); }, [token]);
   return <section className="work-os">
-    <header className="today-head"><div><p>PHASE WORK OS</p><h2>Heute</h2><span>Projekte, Research und Agentenarbeit an einem ehrlichen Ort.</span></div><button onClick={onOpenAgent}>OpenCode öffnen</button></header>
+    <header className="today-head"><div><p>PHASE WORK OS</p><h2>Heute</h2><span>Projekte, Research und Agentenarbeit an einem ehrlichen Ort.</span></div></header>
     {error && <p className="work-os-error">{error}</p>}
     <section className="work-os-grid">
       <article className="work-card projects"><div className="work-card-head"><h3>Projekte</h3><span>{data?.projects.length ?? 0}</span></div><form onSubmit={(event) => { event.preventDefault(); if (projectName.trim()) submit(async () => { await post("/api/work-os/projects", { name: projectName }); setProjectName(""); }); }}><input value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="Neues Projekt"/><button>Hinzufügen</button></form>{data?.projects.length ? data.projects.map((project) => <div className="project-row" key={project.id}><div><b>{project.name}</b><small>{project.open_task_count ?? 0} offen · {project.task_count} Aufgaben</small></div><span>{project.status}</span></div>) : <p className="empty">Noch keine Projekte. Lege eines für zusammenhängende Agentenarbeit an.</p>}</article>
