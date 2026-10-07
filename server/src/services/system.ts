@@ -65,7 +65,7 @@ function disk() {
 }
 function dashboardService() {
   try {
-    execFileSync("systemctl", ["is-active", "--quiet", "haas-arts-dashboard.service"], { stdio: "ignore", timeout: 1_000 });
+    execFileSync("systemctl", ["--user", "is-active", "--quiet", "haas-arts-dashboard.service"], { stdio: "ignore", timeout: 1_000 });
     return { name: "haas-arts-dashboard.service", status: "active" as const };
   } catch (error) {
     return { name: "haas-arts-dashboard.service", status: (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT" ? "unavailable" : "inactive") as "inactive" | "unavailable" };
