@@ -1,8 +1,8 @@
 {
-  "name": "haas-arts-digital-performance",
+  "name": "dailyhorse",
   "version": "1.0.0",
-  "description": "Local-first digital performance dashboard for Haas Arts",
-  "private": true,
+  "description": "Local-first command center for performance, editorial work, and persistent OpenCode sessions",
+  "private": false,
   "type": "module",
   "directories": {
     "doc": "docs",

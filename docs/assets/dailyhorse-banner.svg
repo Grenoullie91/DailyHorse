@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="430" viewBox="0 0 1600 430" role="img" aria-labelledby="title description">
+  <title id="title">DailyHorse</title>
+  <description id="description">Local command center for daily development work</description>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#19082a"/><stop offset="1" stop-color="#4a2771"/></linearGradient>
+    <linearGradient id="horse" x1="0" x2="1"><stop stop-color="#bca5ff"/><stop offset="1" stop-color="#fff"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1600" height="430" rx="34" fill="url(#bg)"/>
+  <path d="M1135 90c103-40 231 19 255 123 20 84-31 159-115 182-83 23-160-16-190-91-28-71-12-168 50-214Zm-50 102c-82-48-173-14-207 52-26 51-7 123 49 150 55 27 124 3 152-48 24-45 22-105 6-154Z" fill="#886cba" opacity=".35"/>
+  <path d="M1125 245c29-72 89-120 169-120 40 0 75 12 105 39l-32 37c-20-18-44-27-72-27-50 0-89 29-107 80-15 43-8 82 23 111-49 3-89-22-108-63-14-30-7-69 22-104Z" fill="url(#horse)" filter="url(#glow)"/>
+  <path d="M1152 126l35-56 15 59 48 10-40 28-34-16-24 32-15-57Z" fill="#d9cbff"/>
+  <text x="130" y="173" fill="#bda7eb" font-family="monospace" font-size="19" letter-spacing="7">LOCAL DAILY COMMAND CENTER</text>
+  <text x="125" y="270" fill="#fff" font-family="Georgia,serif" font-size="118" font-weight="700">DailyHorse</text>
+  <text x="132" y="326" fill="#e4d9f5" font-family="Arial,sans-serif" font-size="29">Performance · Editorial · Persistent OpenCode Workspace</text>
+  <circle cx="142" cy="367" r="7" fill="#9ff0bf"/><text x="162" y="375" fill="#cbbde2" font-family="Arial,sans-serif" font-size="20">local-first, no fabricated signals</text>
+</svg>

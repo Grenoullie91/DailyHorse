@@ -1,107 +1,150 @@
-# Haas Arts Digital Performance Dashboard
+<p align="center">
+  <img src="docs/assets/dailyhorse-banner.svg" alt="DailyHorse" width="100%" />
+</p>
 
-Local-first daily dashboard for the digital performance of Haas Arts. It runs locally at `http://127.0.0.1:4174`, persists metric snapshots in SQLite, and never puts external API credentials in the frontend.
+# DailyHorse
 
-## Current delivery
+**A local-first daily command center for performance, editorial work, and OpenCode-powered development.**
 
-- Production-ready local React dashboard with dark/light mode, responsive layout, source dialogs, KPI availability states, content table, GitHub open-source view, source-status page and no fabricated data.
-- Fastify API and SQLite/WAL persistence with normalized `sources`, `channels`, `content`, `metric_snapshots`, `traffic_sources`, `journeys` and `sync_runs` tables.
-- Connector lifecycle architecture: authenticate/configure -> collect -> normalize -> persist -> report sync state.
-- Working GitHub connector: repository metadata, MIT identification, stars, forks, issues, and owner traffic views/clones when the token has the required repository access. GitHub's short traffic history is retained locally as snapshots.
-- Working Google connectors for GA4 daily users/sessions/pageviews/engagement/events, Search Console daily clicks/impressions/CTR/position, and YouTube Analytics daily views/likes/comments/shares/watchtime once a valid OAuth access token is configured.
-- Explicit, secure connection states for GA4, Search Console, YouTube, Instagram, Google Business, Google Play and Google Groups. The first four remain connection-required until OAuth/service credentials are configured; Groups is explicitly unavailable through a suitable official analytics API.
+DailyHorse turns a browser new tab into a calm local workspace: check real performance signals, review editorial opportunities, open the full blog editorial desk, and delegate development work to persistent local OpenCode sessions.
+
+> Local by design. No hosted control plane. No browser-cookie scraping. No fabricated metrics.
+
+## What It Does
+
+| Area | Purpose |
+| --- | --- |
+| **Command Center** | Persistent local OpenCode sessions, task queue, active jobs, recent activity, and an interactive terminal. |
+| **Performance** | Official API-backed signals from GA4, Search Console, YouTube, GitHub, Google Play, and optional Meta/Instagram integrations. |
+| **Editorial** | Blog inventory, ranked research candidates, editorial source health, and direct access to the existing local editorial desk. |
+| **New Tab** | A minimal Chromium extension opens the local dashboard for every new browser tab. |
+
+## Daily Flow
+
+1. Open a new tab.
+2. Capture a task with `OpenCode, erledige ...`.
+3. See which agents and tasks are active, queued, stopped, or need attention.
+4. Check measured performance and editorial signals.
+5. Open the full local editorial workspace when it is time to research, draft, review, or publish.
+
+## Architecture
+
+```text
+Chromium New Tab extension
+          |
+          v
+DailyHorse dashboard  (127.0.0.1:4174)
+          |
+          +-- official analytics/content connectors
+          +-- local editorial data and admin workspace
+          +-- authenticated local WebSocket companion
+                    |
+                    +-- OpenCode PTY sessions
+                    +-- interactive shell PTY
+                    +-- SQLite task/session/event registry
+```
+
+The browser is a client only. The local Fastify service is the source of truth for agent metadata, queue state, and PTY lifecycle.
+
+## OpenCode Command Center
+
+- Multiple named local agent-session records with independent OpenCode PTYs.
+- Persistent task queue and event history in local SQLite.
+- Configurable concurrency cap through `OPENCODE_MAX_AGENTS` (default `3`, maximum `8`).
+- Task states: `queued`, `starting`, `running`, `waiting`, `needs_attention`, `completed`, `failed`, `cancelled`.
+- Companion restart reconciliation: previous running tasks become `needs_attention`; the dashboard never claims a process survived without verifying it.
+- xterm.js shell and OpenCode terminals with ANSI colors, resize, scrollback, keyboard input, and copy/paste.
+
+OpenCode itself remains responsible for its own permission model, `AGENTS.md` rules, configured providers, and operating-system access. DailyHorse does not auto-approve permissions or add privileges.
+
+## Security Model
+
+- The server binds to `127.0.0.1` by default.
+- The workspace bridge accepts only explicit local dashboard origins.
+- PTY control requires a short-lived, in-memory, same-origin token.
+- No wildcard CORS, public network listener, remote-execution API, or command query parameters.
+- OAuth credentials, service-account files, tokens, SQLite databases, logs, and `.env` are ignored by Git.
+- External data comes from documented official APIs. When data is unavailable, the UI says so instead of estimating it.
 
 ## Requirements
 
-- Node.js 22+ and npm
-- A local desktop session with `systemd --user` for autostart
-- API credentials only for sources you choose to connect
+- Node.js 22+
+- Linux/macOS-style local shell for PTY support
+- OpenCode installed and available on `PATH` for the agent workspace
+- Optional: `systemd --user` for autostart
+- Optional: provider credentials only for the connectors you choose to enable
 
-## Install and run
+## Quick Start
 
 ```bash
-cd ~/dashboard-app
+git clone https://github.com/Grenoullie91/DailyHorse.git
+cd DailyHorse
 cp .env.example .env
 npm install
 npm run build
 npm start
 ```
 
-Open `http://127.0.0.1:4174`. For development with hot reload, run `npm run dev` and open `http://127.0.0.1:5174`.
+Open `http://127.0.0.1:4174`.
 
-## GitHub setup
+For development:
 
-1. Create a fine-grained PAT belonging to `Grenoullie91` with access to the required repositories.
-2. Grant the token the minimum repository permissions needed for metadata. GitHub traffic endpoints additionally require push-level repository access.
-3. Add `GITHUB_TOKEN=...` to `.env`.
-4. Run `npm run sync` or use **Aktualisieren** in the UI.
+```bash
+npm run dev
+```
 
-Alternatively, an authenticated local GitHub CLI (`gh auth login`) for the repository owner is used through the OS keyring. Its token is never copied into `.env`, the database or logs.
+## Configuration
 
-## Google / Meta configuration
+All secrets are local environment variables. Start from `.env.example`; never commit `.env`.
 
-Create OAuth credentials in the platform's official developer console. Secrets remain in `.env`; the browser only calls the local dashboard API.
+| Setting | Use |
+| --- | --- |
+| `OPENCODE_WORKSPACE_DIR` | Neutral default directory for new OpenCode sessions. Defaults to the local home directory. |
+| `OPENCODE_MAX_AGENTS` | Maximum concurrently spawned OpenCode agents. Defaults to `3`. |
+| `SYNC_INTERVAL_MINUTES` | Connector refresh interval. Defaults to `60`. |
+| `GITHUB_TOKEN`, Google/Meta settings | Optional connector credentials. They remain server-side only. |
 
-The configured Google client file supports the local authorization route: open `http://127.0.0.1:4174/api/oauth/google/start`, sign in with an account that has access to GA4, Search Console and the Haas Arts YouTube channel, then grant the listed read-only scopes. Access/refresh tokens are stored only in the local SQLite database, never returned to the browser.
+## Browser New Tab
 
-| Source | Required configuration | Main official scope / permission |
-| --- | --- | --- |
-| GA4 | Google OAuth or a service account added to the property; `GA4_PROPERTY_ID` | `analytics.readonly` |
-| Search Console | OAuth user with verified property access; `SEARCH_CONSOLE_SITE_URL` | `webmasters.readonly` |
-| YouTube | Google OAuth owner of the channel; `YOUTUBE_CHANNEL_ID` | `youtube.readonly` |
-| Instagram | Professional account, approved Meta app permissions, account ID/token | `instagram_basic`, `instagram_manage_insights` |
-| Google Business | OAuth user with Business Profile location access | `business.manage` |
-| Google Play | Service account granted Play Console access | `androidpublisher` |
+Load `new-tab-extension/` as an unpacked extension in a Chromium browser:
 
-For Play, configure `PLAY_SERVICE_ACCOUNT_FILE` with an absolute path to a locally protected service-account JSON key and `PLAY_PACKAGE_NAMES` as a comma-separated allow-list. The dashboard uses a signed server-side JWT, does not copy the private key, and currently reads the official Android Publisher reviews endpoint. Installs, active users, uninstalls, version distribution and vitals are shown only after the respective Play Developer Reporting API report is available for the account; they are never inferred from reviews.
+1. Open `chrome://extensions` or `brave://extensions`.
+2. Enable **Developer mode**.
+3. Select **Load unpacked**.
+4. Choose `new-tab-extension/`.
 
-Detailed official API coverage, endpoint limitations and unavailable metrics are in `docs/research/`.
-
-Google Business Profile data is available only if Google approves Business Profile API access for the Cloud project. A rejected application is represented as **Not available through official API**; this project will not bypass that restriction through scraping or browser automation.
-
-For the configured Facebook Login variant, configure `META_APP_ID`, `META_APP_SECRET`, and `META_REDIRECT_URI` locally, use `instagram_business_basic`, `instagram_business_manage_insights` and `pages_show_list`, and link the professional Instagram account to an accessible Facebook Page. Meta permits the local HTTP exception only for `localhost`, so use `http://localhost:4174/api/oauth/meta/callback` during local development. Do not use normal Instagram credentials or browser cookies. Start the local authorization at `/api/oauth/meta/start`; tokens are stored only in the local SQLite database.
-
-## Data model and attribution
-
-- `sources`: connection and error state.
-- `channels` and `content`: normalized platform entities.
-- `metric_snapshots`: append-only historical values with period, dimensions, source and attribution.
-- `traffic_sources`: acquisition breakdowns.
-- `journeys`: only directly measured or explicitly derived flows.
-- `sync_runs`: audit trail for every attempt.
-
-Attribution labels are intentional: **directly measured**, **derived**, **estimated**, and **unavailable**. The application must never claim an Instagram/YouTube conversion path that the connected APIs do not directly measure.
-
-## Synchronisation
-
-The scheduler syncs at process startup and subsequently every `SYNC_INTERVAL_MINUTES` (minimum 15). The default is 60. `POST /api/sync` and each source page's action trigger a manual server-side sync. Connector failures preserve previously stored values and are visible under **Data Sources**.
+The extension redirects new tabs to the local dashboard. It contains no credentials and does not communicate with external services.
 
 ## Autostart
 
-Build once, then install the systemd user service:
+The repository includes a user-service template for the dashboard. After building, install the user service:
 
 ```bash
-cd ~/dashboard-app
-npm run build
 npm run install-autostart
-```
-
-The service uses `systemd --user`, no terminal window, and restarts after a failure. Confirm it with:
-
-```bash
 systemctl --user status haas-arts-dashboard.service
 ```
 
-Remove it with `npm run uninstall-autostart`.
+The editorial workspace is intentionally a separate local service in the Haas Arts installation because it owns the Markdown files and publication workflow.
 
-## Troubleshooting
+## Honest Limitations
 
-- **Connection required:** fill the relevant `.env` values and ensure the external account has the documented permission.
-- **GitHub traffic missing:** traffic endpoints require push-level access and only expose a short rolling window; check the token's repository access.
-- **Metric is blank instead of zero:** this is intentional when a connector has not delivered the metric or the official API does not expose it.
-- **Port is busy:** change `PORT` in `.env`, rebuild, and restart the systemd service.
-- **Inspect service logs:** `journalctl --user -u haas-arts-dashboard.service -f`.
+- OpenCode's terminal interface does not expose a universally reliable percentage-progress API. DailyHorse shows durable status, timestamps, output, and attention states instead of invented progress bars.
+- Task completion and attention status can be set explicitly in the command-center lifecycle; process exits are reconciled conservatively.
+- Connector coverage depends on external provider permissions. Unsupported metrics remain unavailable rather than inferred.
 
-## Security
+## Development
 
-`.env`, SQLite data and logs are ignored by Git. Never copy browser cookies, hard-code credentials, or expose a token in the UI. This project uses only official APIs and server-side credentials.
+```bash
+npm run build
+npm test
+```
+
+The project uses React/Vite, Fastify, SQLite/WAL, xterm.js, node-pty, and official provider APIs. See `docs/research/` for connector-specific source and API notes.
+
+## Privacy
+
+DailyHorse is designed for a single local user. It is not a hosted multi-tenant service and should not be exposed to a network without a separate, deliberate security design.
+
+## License
+
+See [LICENSE](LICENSE).
