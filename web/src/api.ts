@@ -1,6 +1,6 @@
 export type SourceInfo = { source: string; metric: string; fetchedAt: string | null; attribution: string; availability: "available" | "unavailable"; detail?: string };
 export type Kpi = { id: string; value: number | null; capturedAt: string | null; info: SourceInfo };
-export type Source = { id: string; name: string; status: string; status_detail: string; last_success_at: string | null; last_attempt_at: string | null };
+export type Source = { id: string; name: string; status: string; status_detail: string; last_success_at: string | null; last_attempt_at: string | null; state: "connected" | "syncing" | "unsupported" | "access_required" | "setup_required" | "operational_error"; state_label: string; action: string | null };
 export type Editorial = { publishedCount: number; draftCount: number; generatedAt: string | null; latest: Array<{ title: string; url: string; date: string; category: string; readingTime?: number }>; suggestions: Array<{ id: string; title: string; source: string; sourceItemUrl: string; score?: number }>; newsUpdatedAt: string | null; sourceHealth: Record<string, number>; sourceHealthUpdatedAt: string | null; adminUrl: string; blogUrl: string };
 const get = <T,>(path: string) => fetch(`/api${path}`).then(async (response) => { if (!response.ok) throw new Error(await response.text()); return response.json() as Promise<T>; });
 const post = <T,>(path: string) => fetch(`/api${path}`, { method: "POST" }).then(async (response) => { if (!response.ok) throw new Error(await response.text()); return response.json() as Promise<T>; });
