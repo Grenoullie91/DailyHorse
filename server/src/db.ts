@@ -76,6 +76,10 @@ migrate("2026-10-07-work-os", `
     ('calendar','setup_needed','Calendar is not connected. Setup is intentionally manual.',datetime('now'));
 `);
 
+migrate("2026-10-07-today-integrations", `
+  CREATE TABLE calendar_selections (calendar_id TEXT PRIMARY KEY, selected INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL);
+`);
+
 const sources = [
   ["github", "GitHub"], ["ga4", "Google Analytics 4"], ["search_console", "Google Search Console"],
   ["youtube", "YouTube"], ["instagram", "Instagram"], ["google_business", "Google Business Profile"],

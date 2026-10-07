@@ -9,6 +9,7 @@ const scopes = [
   "https://www.googleapis.com/auth/youtube.readonly",
   "https://www.googleapis.com/auth/yt-analytics.readonly",
   "https://www.googleapis.com/auth/business.manage",
+  "https://www.googleapis.com/auth/calendar.readonly",
 ];
 
 export function authorizationUrl() {

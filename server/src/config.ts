@@ -29,4 +29,5 @@ export const config = {
   instagram: { accountId: process.env.INSTAGRAM_ACCOUNT_ID, token: process.env.INSTAGRAM_ACCESS_TOKEN },
   play: { serviceAccountFile: process.env.PLAY_SERVICE_ACCOUNT_FILE, packageNames: (process.env.PLAY_PACKAGE_NAMES ?? "").split(",").map((value) => value.trim()).filter(Boolean) },
   meta: { appId: process.env.META_APP_ID, appSecret: process.env.META_APP_SECRET, redirectUri: process.env.META_REDIRECT_URI ?? "http://127.0.0.1:4174/api/oauth/meta/callback" },
+  ionos: { accountsJson: process.env.IONOS_IMAP_ACCOUNTS },
 };
