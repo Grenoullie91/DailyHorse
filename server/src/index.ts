@@ -1,8 +1,10 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
+import websocket from "@fastify/websocket";
 import path from "node:path";
 import fs from "node:fs";
+import crypto from "node:crypto";
 import { config } from "./config.js";
 import { overview, sourceStatuses, metricSeries, insights } from "./services/analytics.js";
 import { connectorById } from "./connectors/index.js";
@@ -10,15 +12,48 @@ import { startScheduler, syncConnector } from "./scheduler.js";
 import { authorizationUrl, completeAuthorization } from "./services/google-oauth.js";
 import { metaAuthorizationUrl, completeMetaAuthorization } from "./services/meta-oauth.js";
 import { editorialOverview } from "./services/editorial.js";
+import { workspace, type WorkspaceTarget } from "./services/workspace.js";
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: `http://${config.host}:5174` });
+await app.register(websocket);
+const workspaceTokens = new Map<string, number>();
+const allowedOrigins = new Set(["http://127.0.0.1:4174", "http://localhost:4174", "http://127.0.0.1:5174", "http://localhost:5174"]);
+function validWorkspaceRequest(origin: string | undefined, token: string | undefined) { const expires = token ? workspaceTokens.get(token) : undefined; return !!origin && allowedOrigins.has(origin) && !!expires && expires > Date.now(); }
+function requireWorkspaceToken(request: { headers: Record<string, string | string[] | undefined> }, reply: { code: (status: number) => { send: (body: object) => unknown } }) { return validWorkspaceRequest(request.headers.origin as string | undefined, request.headers["x-daily-horse-token"] as string | undefined) ? undefined : reply.code(401).send({ error: "Authenticated local workspace session required." }); }
 app.get("/api/health", async () => ({ ok: true, now: new Date().toISOString() }));
 app.get("/api/overview", async () => overview());
 app.get("/api/sources", async () => sourceStatuses());
 app.get("/api/series/:metric", async (request) => metricSeries((request.params as { metric: string }).metric, Number((request.query as { days?: string }).days ?? 30)));
 app.get("/api/insights", async () => insights());
 app.get("/api/editorial", async () => editorialOverview());
+app.get("/api/workspace/bootstrap", async (request, reply) => {
+  const origin = request.headers.origin;
+  if (!origin || !allowedOrigins.has(origin)) return reply.code(403).send({ error: "Local dashboard origin required." });
+  const token = crypto.randomBytes(24).toString("base64url"); workspaceTokens.set(token, Date.now() + 5 * 60_000);
+  return { token, status: workspace.status() };
+});
+app.get("/api/workspace/status", async (request, reply) => requireWorkspaceToken(request, reply) ?? workspace.status());
+app.post("/api/workspace/control", async (request, reply) => {
+  const denied = requireWorkspaceToken(request, reply); if (denied) return denied;
+  const body = request.body as { action?: "start" | "restart" | "new" | "stop"; target?: WorkspaceTarget };
+  if (!body || !["start", "restart", "new", "stop"].includes(body.action ?? "") || !["agent", "terminal"].includes(body.target ?? "")) return reply.code(400).send({ error: "Invalid workspace control." });
+  return workspace.control(body.action!, body.target!);
+});
+app.post("/api/workspace/task", async (request, reply) => {
+  const denied = requireWorkspaceToken(request, reply); if (denied) return denied;
+  const body = request.body as { message?: string }; if (typeof body?.message !== "string") return reply.code(400).send({ error: "Task text required." });
+  try { return workspace.taskInput(body.message); } catch (error) { return reply.code(400).send({ error: error instanceof Error ? error.message : "Task rejected." }); }
+});
+app.get("/api/workspace/socket", { websocket: true }, (socket, request) => {
+  const protocols = request.headers["sec-websocket-protocol"]?.split(",").map((value) => value.trim()) ?? [];
+  const token = protocols[1]; const target = (new URL(request.url, "http://localhost")).searchParams.get("target") as WorkspaceTarget;
+  if (!validWorkspaceRequest(request.headers.origin, token) || !["agent", "terminal"].includes(target)) return socket.close(1008, "Unauthorized local workspace connection");
+  const detach = workspace.attach(target, (data) => socket.send(JSON.stringify({ type: "output", data })));
+  socket.send(JSON.stringify({ type: "status", status: workspace.status() }));
+  socket.on("message", (raw: Buffer) => { try { const message = JSON.parse(raw.toString()) as { type?: string; data?: string; cols?: number; rows?: number }; if (message.type === "input" && typeof message.data === "string") workspace.input(target, message.data); if (message.type === "resize") workspace.resize(target, Number(message.cols), Number(message.rows)); } catch { socket.close(1003, "Invalid terminal message"); } });
+  socket.on("close", detach);
+});
 app.get("/api/assets/:asset", async (request, reply) => {
   const files: Record<string, string> = { logo: "/home/haas/Downloads/logodashboard.png", header: "/home/haas/Downloads/Headerdashboard.png" };
   const file = files[(request.params as { asset: string }).asset];
