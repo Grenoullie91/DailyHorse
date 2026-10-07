@@ -96,6 +96,17 @@ migrate("2026-10-07-local-files", `
   );
 `);
 
+migrate("2026-10-07-github-traffic-views", `
+  CREATE TABLE github_capabilities (
+    capability TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    checked_at TEXT NOT NULL
+  );
+  CREATE INDEX idx_github_daily_traffic ON metric_snapshots(content_id, metric, captured_at)
+    WHERE metric IN ('repository_views', 'unique_visitors');
+`);
+
 const sources = [
   ["github", "GitHub"], ["ga4", "Google Analytics 4"], ["search_console", "Google Search Console"],
   ["youtube", "YouTube"], ["instagram", "Instagram"], ["google_business", "Google Business Profile"],

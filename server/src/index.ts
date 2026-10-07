@@ -20,6 +20,7 @@ import { remoteFiles, RemoteFilesError } from "./services/remote-files.js";
 import { sftpCredentials } from "./services/sftp-credentials.js";
 import { localFiles, LocalFilesError } from "./services/local-files.js";
 import { systemMetrics } from "./services/system.js";
+import { topRepositories } from "./services/github-traffic.js";
 
 const app = Fastify({ logger: true });
 app.addContentTypeParser("application/octet-stream", { parseAs: "buffer" }, (_, body, done) => done(null, body));
@@ -36,6 +37,7 @@ app.get("/api/overview", async () => overview());
 app.get("/api/sources", async () => sourceStatuses());
 app.get("/api/series/:metric", async (request) => metricSeries((request.params as { metric: string }).metric, Number((request.query as { days?: string }).days ?? 30)));
 app.get("/api/insights", async () => insights());
+app.get("/api/github/top-repositories", async (request) => topRepositories(Number((request.query as { days?: string }).days ?? 14)));
 app.get("/api/editorial", async () => editorialOverview());
 app.get("/api/workspace/bootstrap", async (request, reply) => {
   if (!localDashboardRequest(request.headers)) return reply.code(403).send({ error: "Local dashboard origin required." });

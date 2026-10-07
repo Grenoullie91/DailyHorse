@@ -21,7 +21,9 @@ export class GitHubConnector extends BaseConnector {
   }
   private headers() { const token = this.token(); return { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", ...(token ? { Authorization: `Bearer ${token}` } : {}) }; }
   async status(): Promise<{ status: SourceStatus; detail: string }> {
-    return this.token() ? { status: "connected", detail: "Authenticated through the local GitHub CLI keyring; traffic metrics require repository push access." } : { status: "authentication_required", detail: "GITHUB_TOKEN or an authenticated GitHub CLI session is required for private data and traffic analytics." };
+    if (!this.token()) return { status: "authentication_required", detail: "GITHUB_TOKEN or an authenticated GitHub CLI session is required for private data and traffic analytics." };
+    const traffic = db.prepare("SELECT state,detail FROM github_capabilities WHERE capability='traffic_views'").get() as { state: string; detail: string } | undefined;
+    return { status: "connected", detail: traffic?.state === "available" ? "GitHub repository and Traffic Views access verified." : traffic?.state === "permission_missing" ? traffic.detail : "Authenticated through the local GitHub CLI keyring; Traffic Views will be checked during sync." };
   }
   private async get<T>(endpoint: string): Promise<T> {
     const response = await fetch(`${this.base}${endpoint}`, { headers: this.headers() });
@@ -32,9 +34,13 @@ export class GitHubConnector extends BaseConnector {
     db.prepare("INSERT OR IGNORE INTO metric_snapshots(source_id,content_id,metric,value,captured_at,dimensions_json,fetched_at) VALUES ('github',?,?,?,?,?,?)")
       .run(contentId, metric, value, capturedAt, JSON.stringify(dimensions ?? {}), new Date().toISOString());
   }
+  private trafficCapability(state: "available" | "permission_missing", detail: string) {
+    db.prepare("INSERT INTO github_capabilities(capability,state,detail,checked_at) VALUES ('traffic_views',?,?,?) ON CONFLICT(capability) DO UPDATE SET state=excluded.state,detail=excluded.detail,checked_at=excluded.checked_at")
+      .run(state, detail, new Date().toISOString());
+  }
   async collect(): Promise<number> {
     const repositories = await this.get<Repo[]>(`/users/${encodeURIComponent(config.github.username)}/repos?per_page=100&sort=updated`);
-    const now = new Date().toISOString(); let count = 0;
+    const now = new Date().toISOString(); let count = 0; let trafficViewsVerified = false; let trafficPermissionDenied = false;
     for (const repo of repositories) {
       const contentId = `github:repo:${repo.id}`;
       db.prepare("INSERT INTO channels(id,source_id,name,external_id,url,metadata_json) VALUES ('github:profile','github',?,?,?,?) ON CONFLICT(id) DO UPDATE SET metadata_json=excluded.metadata_json")
@@ -44,13 +50,23 @@ export class GitHubConnector extends BaseConnector {
       for (const [metric, value] of [["stars", repo.stargazers_count], ["forks", repo.forks_count], ["open_issues", repo.open_issues_count]] as const) { this.snapshot(contentId, metric, value, now); count++; }
       if (!this.token()) continue;
       try {
-        const [views, clones] = await Promise.all([this.get<Traffic>(`/repos/${repo.full_name}/traffic/views`), this.get<Traffic>(`/repos/${repo.full_name}/traffic/clones`)]);
+        const views = await this.get<Traffic>(`/repos/${repo.full_name}/traffic/views`);
+        trafficViewsVerified = true;
         this.snapshot(contentId, "repository_views", views.count, now); this.snapshot(contentId, "unique_visitors", views.uniques, now);
-        this.snapshot(contentId, "clones", clones.count, now); this.snapshot(contentId, "unique_cloners", clones.uniques, now); count += 4;
+        count += 2;
         for (const row of views.views ?? []) { this.snapshot(contentId, "repository_views", row.count, row.timestamp, { granularity: "day" }); this.snapshot(contentId, "unique_visitors", row.uniques, row.timestamp, { granularity: "day" }); count += 2; }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "GitHub Traffic Views request failed.";
+        if (/GitHub API (401|403|404):/.test(message)) trafficPermissionDenied = true;
+      }
+      try {
+        const clones = await this.get<Traffic>(`/repos/${repo.full_name}/traffic/clones`);
+        this.snapshot(contentId, "clones", clones.count, now); this.snapshot(contentId, "unique_cloners", clones.uniques, now); count += 2;
         for (const row of clones.views ?? []) { this.snapshot(contentId, "clones", row.count, row.timestamp, { granularity: "day" }); this.snapshot(contentId, "unique_cloners", row.uniques, row.timestamp, { granularity: "day" }); count += 2; }
-      } catch (error) { /* Public repository metrics remain valid when traffic access is unavailable. */ }
+      } catch { /* Clones are supplementary; Views capability is reported independently. */ }
     }
+    if (trafficViewsVerified) this.trafficCapability("available", "GitHub Traffic Views access verified during the latest sync.");
+    else if (trafficPermissionDenied) this.trafficCapability("permission_missing", "GitHub token lacks access to Traffic Views. Grant the token repository push/admin access, then sync again.");
     return count;
   }
 }
